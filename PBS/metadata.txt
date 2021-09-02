@@ -164,6 +164,14 @@ MapPosition = 0,14,6
 BattleBack = field
 MapSize = 2,1101
 #-------------------------------
+[032]
+# Custom Dungeon Forrest
+Dungeon = true
+#-------------------------------
+[033]
+# Custom Dungeon Test
+Dungeon = true
+#-------------------------------
 [034]
 # Ice Cave
 Bicycle = true
