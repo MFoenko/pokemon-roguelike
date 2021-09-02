@@ -113,6 +113,10 @@ MapPosition = 0,14,8
 BattleBack = field
 MapSize = 1,11
 #-------------------------------
+[022]
+# DungeonTest
+Dungeon = true
+#-------------------------------
 [023]
 # Lerucean Town
 Outdoor = true
