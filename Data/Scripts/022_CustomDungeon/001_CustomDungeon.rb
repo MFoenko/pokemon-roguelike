@@ -1,7 +1,7 @@
 class MazeConstants
   NORTH = 0b0001
-  EAST = 0b0100
   WEST = 0b0010
+  EAST = 0b0100
   SOUTH = 0b1000
 
   def self.invert(direction)
@@ -12,101 +12,35 @@ class MazeConstants
     when SOUTH then NORTH
     end
   end
-
 end
 
-class SpelunkyMaze
+class DungeonPath
+  def initialize(length, weights = [1, 1, 1, 1])
+    weight_north = weights[0]
+    weight_west = weights[2]
+    weight_east = weights[1]
+    weight_south = weights[3]
 
-  X_WEIGHT = 2
-  Y_WEIGHT = 2
+    @nodes = []
 
-  def initialize(width, height, startX = rand(width), startY = height-1)
-    @width = width
-    @height = height
-    @grid = Array.new(@width) { Array.new(@height) { SpelunkyMazeCell.new } }
-    echoln @grid
 
-    @start_x = startX
-    @start_y = startY
   end
 
-  def generate
-    return if @width <= 0 || @height <= 0
+  class DungeonPathNode
+    # should keep traack of position relative to head node
+    @north = nil
+    @west = nil
+    @east = nil
+    @south = nil
 
-    # start by picking a random tile at the bottom to be the entrance
-
-    x = @start_x
-    y = @start_y
-
-    explored = []
-    # while we're not at the top of the maze
-    while y > 0
-      explored.push(@grid[x][y])
-
-      # determine the directions we can move in
-      move_pool = []
-      if y > 0 && !explored.include?(@grid[x][y - 1])
-        for i in 0...Y_WEIGHT
-          move_pool.push(MazeConstants::NORTH)
-        end
-      end
-      if x > 0 && !explored.include?(@grid[x - 1][y])
-        for i in 0...X_WEIGHT
-          move_pool.push(MazeConstants::WEST)
-        end
-      end
-
-      if y < @height - 1 && !explored.include?(@grid[x][y + 1])
-        for i in 0...Y_WEIGHT
-          move_pool.push(MazeConstants::SOUTH)
-        end
-      end
-      if x < @width - 1 && !explored.include?(@grid[x + 1][y])
-        for i in 0...X_WEIGHT
-          move_pool.push(MazeConstants::EAST)
-        end
-      end
-
-      # if out of directions to move, we've fucked up, exit
-      # TODO update logic so that this doesn't happen
-      break if move_pool.length.zero?
-
-      # pick a random direction
-      move = move_pool[rand(move_pool.length)]
-
-      echoln "x=#{x} y=#{y} move_pool=#{move_pool} move=#{move}"
-      # add an opening to the current cell in the direction we're moving
-      @grid[x][y].addBitmask(move)
-      # move in that direction
-      case move
-      when MazeConstants::NORTH then y -= 1
-      when MazeConstants::WEST then x -= 1
-      when MazeConstants::SOUTH then y += 1
-      when MazeConstants::EAST then x += 1
-      end
-      # add an opening to the previous cell in the new cell
-      inverse_move = MazeConstants::invert(move)
-      @grid[x][y].addBitmask(inverse_move)
-    end
-
-    @grid[x][y].addBitmask(MazeConstants::NORTH) if y == @height - 1
-    @grid[@start_x][@start_y].addBitmask(MazeConstants::SOUTH)
+    attr_accessor :north, :east, :west, :south
   end
-
-  echoln @grid
-
-  def [](x, y)
-    @grid[x][y]
-  end
-
-  attr_accessor :start_x
-  attr_accessor :start_y
 end
 
 class SpelunkyMazeCell
   @north = 0
-  @east = 0
   @west = 0
+  @east = 0
   @south = 0
   @is_on_path = false
 
@@ -135,67 +69,118 @@ class SpelunkyMazeCell
   end
 end
 
-class CustomDungeon
-  TEMPLATE_SECTION_WIDTH = 8
-  TEMPLATE_SECTION_HEIGHT = 8
-
-  def initialize(map, width, height)
-    @map_template = map.clone
-    @map = map
-    @width = width
-    @height = height
-    @maze = SpelunkyMaze.new(width, height)
-    @start_x = 0
-    @start_y = 0
+class DungeonSpec
+  @bonus_rate = 5
+  def initialize(event = nil)
+    next if event.nil?
+    page = event.pages[0]
+    for command in page.list
+      next if command.code != 108 # skip non Comment
+      parseCommand(command.parameters[0])
+    end
   end
 
-  attr_accessor :start_x
-  attr_accessor :start_y
+  def self.Default
+    DungeonSpec.new
+  end
+
+  def parseCommand(command)
+    next if text.nil?
+    if command[/^BonusRate:*[\s\S]+$/i]
+      @bonus_rate = $~[1].to_i
+    end
+  end
+
+  attr_accessor :bonus_rate
+end
+
+class RoomSpec
+  @usage = "Path"
+  @can_rotate = false
+  @scale_difficulty = false
+  @difficulty = 1
+  def initialize(event)
+    page = event.pages[0]
+    for command in page.list
+      next if command.code != 108 # skip non Comment
+      parseCommand(command.parameters[0])
+    end
+  end
+
+  def parseCommand(command)
+    next if text.nil?
+    if command[/^CanRotate:*[\s\S]+$/i]
+      @can_rotate = $~[1] == "true"
+    elsif command[/^ScaleDifficulty:*[\s\S]+$/i]
+      @scale_difficulty = $~[1] == "true"
+    elsif command[/^Difficulty:*[\s\S]+$/i]
+      @difficulty = $~[1].to_i
+    end
+  end
+
+  attr_accessor :can_rotate, :scale_difficulty, :difficulty
+end
+
+class CustomDungeon
+  def initialize(map, difficulty, difficulty_max)
+    @map_template = map.clone
+    @map = map
+    @difficulty = difficulty
+    @difficulty_max = difficulty_max
+
+    @dungeon_spec = nil
+    @rooms = []
+
+    echoln(map.events)
+
+    events = map.events
+    for event in events
+      if event.name[/^Dungeon/] && @dungeon.nil?
+        @dungeon = DungeonSpec.new(event)
+      elsif event.name[/^Room/]
+        @rooms.push(RoomSpec.new(event))
+      end
+      echoln(event[1].name)
+    end
+    if @dungeon_spec.nil?
+      @dungeon_spec = DungeonSpec.Default
+    end
+  end
 
   def generate
-    # echoln(@map.data.methods)
-    # echoln("inspect")
-    # for y in 0..@map.data.ysize
-    #   for x in 0..@map.data.xsize
-    #     echo @map.data[x,y]
-    #     echo " "
-    #   end
-    #   echoln ""
-    # end
+    path_rooms = pick_rooms
+    path_length = path_rooms.length
+    path = DungeonPath.new(path_length)
+    # bonus_count = @difficulty / @dungeon_spec.bonus_rate
+    # path.addBonus(bonus_count) if @dungeon_spec.bonus_rate.positive?
+    set_rooms(path)
+  end
 
-    @maze.generate
+  def pick_rooms
+    rooms = []
+    remaining_difficulty = @difficulty
+    room_pool = []
+    while assembled_difficulty > 0
+      room_pool = assemble_room_pool(remaining_difficulty, difficulty_max) if room_pool.empty?
+      break if room_pool.empty?
 
-    @start_x = @maze.start_x * TEMPLATE_SECTION_WIDTH + TEMPLATE_SECTION_WIDTH / 2
-    @start_y = @maze.start_y * TEMPLATE_SECTION_HEIGHT + TEMPLATE_SECTION_HEIGHT / 2
-
-    @map.width = @width * TEMPLATE_SECTION_WIDTH
-    @map.height = @height * TEMPLATE_SECTION_HEIGHT
-    @map.data = Table.new(@map.width, @map.height, 3)
-
-    for y in 0...@height
-      for x in 0...@width
-        # pick a template section
-        # calculate position of template in template map
-        mapx = x * TEMPLATE_SECTION_WIDTH
-        mapy = y * TEMPLATE_SECTION_HEIGHT
-        template = @maze[x, y].bitmask
-        templatex = (template % 4) * TEMPLATE_SECTION_WIDTH
-        templatey = (template / 4) * TEMPLATE_SECTION_HEIGHT
-        # transpose template into map
-        for j in 0...TEMPLATE_SECTION_HEIGHT
-          for i in 0...TEMPLATE_SECTION_WIDTH
-            @map.data[mapx + i, mapy + j, 0] = @map_template.data[templatex + i, templatey + j, 0]
-            @map.data[mapx + i, mapy + j, 1] = @map_template.data[templatex + i, templatey + j, 1]
-            @map.data[mapx + i, mapy + j, 2] = @map_template.data[templatex + i, templatey + j, 2]
-          end
-        end
-      end
+      room = room_pool[rand(room_pool.length)]
+      rooms.push(room)
+      remaining_difficulty -= room.difficulty
+      room_pool.keep_if { |v| v.difficulty < remaining_difficulty }
     end
-    # echoln(@map.data.inspect)
-    # echoln("full inspect")
-    # echoln(@map.data.full_inspect)
-    # echoln("dump")
-    # echoln(@map.data._dump)
+    rooms
+  end
+
+  def assemble_room_pool(remaining_difficulty, difficulty_max)
+    room_pool = []
+    for room in @rooms
+      room_pool.push(room) if room.difficulty < difficulty_max && room.difficulty < remaining_difficulty
+    end
+    room_pool
+  end
+
+  def build_path(path_length, weights)
   end
 end
 
@@ -206,11 +191,11 @@ Events.onMapCreate += proc { |_sender, e|
   next if !GameData::MapMetadata.exists?(mapID) ||
   !GameData::MapMetadata.get(mapID).random_dungeon
   # this map is a randomly generated dungeon
-  dungeon = CustomDungeon.new(map, 8, 8)
-  dungeon.generate
+  dungeon = CustomDungeon.new(map, 5)
 
-  $game_temp.player_new_x = dungeon.start_x
-  $game_temp.player_new_y = dungeon.start_y
+
+  # $game_temp.player_new_x = dungeon.start_x
+  # $game_temp.player_new_y = dungeon.start_y
   # dungeon.generateMapInPlace(map)
   # roomtiles = []
   # # Reposition events
