@@ -1,82 +1,12 @@
-class MazeConstants
-  NORTH = 0b0001
-  WEST = 0b0010
-  EAST = 0b0100
-  SOUTH = 0b1000
-
-  def self.invert(direction)
-    case direction
-    when NORTH then SOUTH
-    when EAST then WEST
-    when WEST then EAST
-    when SOUTH then NORTH
-    end
-  end
-end
-
-class DungeonPath
-  def initialize(length, weights = [1, 1, 1, 1])
-    weight_north = weights[0]
-    weight_west = weights[2]
-    weight_east = weights[1]
-    weight_south = weights[3]
-
-    @nodes = []
-
-
-  end
-
-  class DungeonPathNode
-    # should keep traack of position relative to head node
-    @north = nil
-    @west = nil
-    @east = nil
-    @south = nil
-
-    attr_accessor :north, :east, :west, :south
-  end
-end
-
-class SpelunkyMazeCell
-  @north = 0
-  @west = 0
-  @east = 0
-  @south = 0
-  @is_on_path = false
-
-  def bitmask
-    bits = 0
-    bits |= MazeConstants::NORTH if @north == 1
-    bits |= MazeConstants::WEST if @west == 1
-    bits |= MazeConstants::EAST if @east == 1
-    bits |= MazeConstants::SOUTH if @south == 1
-    bits
-  end
-
-  def setBitmask(bitmask)
-    @north = bitmask & MazeConstants::NORTH != 0 ? 1 : 0
-    @east = bitmask & MazeConstants::EAST != 0 ? 1 : 0
-    @west = bitmask & MazeConstants::WEST != 0 ? 1 : 0
-    @south = bitmask & MazeConstants::SOUTH != 0 ? 1 : 0
-  end
-
-  def addBitmask(value)
-    setBitmask(bitmask | value)
-  end
-
-  def to_s
-    bitmask.to_s(2)
-  end
-end
-
 class DungeonSpec
   @bonus_rate = 5
   def initialize(event = nil)
-    next if event.nil?
-    page = event.pages[0]
-    for command in page.list
-      next if command.code != 108 # skip non Comment
-      parseCommand(command.parameters[0])
+    if !event.nil?
+      page = event.pages[0]
+      for command in page.list
+        next if command.code != 108 # skip non Comment
+        parseCommand(command.parameters[0])
+      end
     end
   end
 
@@ -85,7 +15,7 @@ class DungeonSpec
   end
 
   def parseCommand(command)
-    next if text.nil?
+    return if command.nil?
     if command[/^BonusRate:*[\s\S]+$/i]
       @bonus_rate = $~[1].to_i
     end
@@ -95,20 +25,24 @@ class DungeonSpec
 end
 
 class RoomSpec
-  @usage = "Path"
-  @can_rotate = false
-  @scale_difficulty = false
-  @difficulty = 1
   def initialize(event)
+    @usage = 'Path'
+    @can_rotate = false
+    @scale_difficulty = false
+    @difficulty = 1
+    echoln event.name
     page = event.pages[0]
     for command in page.list
+      echoln "Param #{command.parameters}"
       next if command.code != 108 # skip non Comment
       parseCommand(command.parameters[0])
     end
+    echoln @difficulty
   end
 
   def parseCommand(command)
-    next if text.nil?
+    echoln command
+    return if command.nil?
     if command[/^CanRotate:*[\s\S]+$/i]
       @can_rotate = $~[1] == "true"
     elsif command[/^ScaleDifficulty:*[\s\S]+$/i]
@@ -134,13 +68,15 @@ class CustomDungeon
     echoln(map.events)
 
     events = map.events
-    for event in events
+    for entry in events
+      event = entry[1]
       if event.name[/^Dungeon/] && @dungeon.nil?
         @dungeon = DungeonSpec.new(event)
+        echoln("Dungeon: #{event.name}")
       elsif event.name[/^Room/]
         @rooms.push(RoomSpec.new(event))
+        echoln("Room: #{event.name}")
       end
-      echoln(event[1].name)
     end
     if @dungeon_spec.nil?
       @dungeon_spec = DungeonSpec.Default
@@ -151,17 +87,19 @@ class CustomDungeon
     path_rooms = pick_rooms
     path_length = path_rooms.length
     path = DungeonPath.new(path_length)
+    path.generate
+    echoln(path)
     # bonus_count = @difficulty / @dungeon_spec.bonus_rate
     # path.addBonus(bonus_count) if @dungeon_spec.bonus_rate.positive?
-    set_rooms(path)
+    # set_rooms(path)
   end
 
   def pick_rooms
     rooms = []
     remaining_difficulty = @difficulty
     room_pool = []
-    while assembled_difficulty > 0
-      room_pool = assemble_room_pool(remaining_difficulty, difficulty_max) if room_pool.empty?
+    while remaining_difficulty > 0
+      room_pool = assemble_room_pool(remaining_difficulty, @difficulty_max) if room_pool.empty?
       break if room_pool.empty?
 
       room = room_pool[rand(room_pool.length)]
@@ -191,8 +129,8 @@ Events.onMapCreate += proc { |_sender, e|
   next if !GameData::MapMetadata.exists?(mapID) ||
   !GameData::MapMetadata.get(mapID).random_dungeon
   # this map is a randomly generated dungeon
-  dungeon = CustomDungeon.new(map, 5)
-
+  dungeon = CustomDungeon.new(map, 20, 2)
+  dungeon.generate
 
   # $game_temp.player_new_x = dungeon.start_x
   # $game_temp.player_new_y = dungeon.start_y
