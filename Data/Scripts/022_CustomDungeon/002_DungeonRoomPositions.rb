@@ -1,4 +1,4 @@
-class DungeonPath
+class DungeonRoomPositions
   def initialize(length, weights = [1, 1, 1, 1])
     @weight_north = weights[0]
     @weight_west = weights[2]
@@ -8,15 +8,17 @@ class DungeonPath
     @length = length
 
     @grid = FlexGrid.new
+    @path = []
+    @moves = []
   end
 
   def generate
     coords = FlexGrid::Coord::START
-    @grid[coords] = 0 # DungeonPathNode()
+    @grid[coords] = 0
 
     room_number = 1
 
-    @length.times do |i|
+    (@length-1).times do |i|
       available_dirs = []
       @weight_north.times { available_dirs.push(FlexGrid::Coord::N) } if @grid[coords + FlexGrid::Coord::N].nil?
       @weight_west.times { available_dirs.push(FlexGrid::Coord::W) } if @grid[coords + FlexGrid::Coord::W].nil?
@@ -28,16 +30,27 @@ class DungeonPath
       break if available_dirs.empty?
 
       move = available_dirs[rand(available_dirs.length)]
-      echoln move
       coords += move
       @grid[coords] = room_number
+      @path.push(coords)
+      @moves.push(move)
       room_number += 1
     end
+  end
+
+  def normalize
+    for coord in @path
+      coord.x += -@grid.begin_x
+      coord.y += -@grid.begin_y
+    end
+    @grid.normalize
   end
 
   def inspect
     @grid.inspect
   end
+
+  attr_accessor :grid, :path, :moves, :length
 end
 
 class FlexGrid
@@ -49,6 +62,8 @@ class FlexGrid
     @data = [[nil]]
   end
 
+  attr_accessor :begin_x, :begin_y, :end_x, :end_y
+
   def width
     zero_comp = @begin_x <= 0 || @end_x >= 0 ? 1 : 0
     @end_x - @begin_x + zero_comp
@@ -59,9 +74,36 @@ class FlexGrid
     @end_y - @begin_y + zero_comp
   end
 
+  def items_in_col(col)
+    @data[col - @begin_x].filter { |v| !v.nil? }
+  end
+
+  def items_in_row(row)
+    elements = []
+    for col in @data
+      element = @data[col][row]
+      elements.push(element) unless element.nil?
+    end
+    elements
+  end
+
   def []=(coord, val)
     ensure_space(coord)
     @data[coord.x - @begin_x][coord.y - @begin_y] = val
+  end
+
+  def draw_rectangle(offset_x, offset_y, width, height, table, table_x, table_y)
+    # ensure space for the entire rectangle
+    ensure_space(Coord.new(offset_x, offset_y))
+    ensure_space(Coord.new(offset_x + width, offset_y + height))
+    for i in 0...width
+      for j in 0...height
+        x = table_x + i
+        y = table_y + j
+        point = Coord.new(offset_x + i, offset_y + j)
+        self[point] = [table[x, y, 0], table[x, y, 1], table[x, y, 2]]
+      end
+    end
   end
 
   def ensure_space(coord)
@@ -85,6 +127,13 @@ class FlexGrid
       @data.push(Array.new(height))
       @end_x += 1
     end
+  end
+
+  def normalize
+    @end_x += -@begin_x
+    @end_y += -@begin_y
+    @begin_x = 0
+    @begin_y = 0
   end
 
   def [](coord)

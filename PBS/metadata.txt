@@ -226,6 +226,10 @@ MapSize = 1,111
 # Dungeon1
 Dungeon = true
 #-------------------------------
+[043]
+# BunnyDungeon
+Dungeon = true
+#-------------------------------
 [044]
 # Route 6
 Outdoor = true

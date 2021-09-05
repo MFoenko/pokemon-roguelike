@@ -1,6 +1,8 @@
 class DungeonSpec
-  @bonus_rate = 5
   def initialize(event = nil)
+    @bonus_rate = 5
+    @wall_width = 2
+    @wall_height = 2
     if !event.nil?
       page = event.pages[0]
       for command in page.list
@@ -21,11 +23,18 @@ class DungeonSpec
     end
   end
 
-  attr_accessor :bonus_rate
+  attr_accessor :bonus_rate, :wall_width, :wall_height
 end
 
 class RoomSpec
-  def initialize(event)
+  def initialize(map, event)
+    @x = event.x + 1
+    @y = event.y
+    @width = 0
+    @width += 1 until map.data[@x + @width, @y, 0] == 0
+    @height = 0
+    @height += 1 until map.data[@x, @y + @height, 0] == 0
+
     @usage = 'Path'
     @can_rotate = false
     @scale_difficulty = false
@@ -37,7 +46,7 @@ class RoomSpec
       next if command.code != 108 # skip non Comment
       parseCommand(command.parameters[0])
     end
-    echoln @difficulty
+    echoln "x=#{@x} y=#{@y} width=#{@width} height=#{@height}"
   end
 
   def parseCommand(command)
@@ -52,7 +61,7 @@ class RoomSpec
     end
   end
 
-  attr_accessor :can_rotate, :scale_difficulty, :difficulty
+  attr_accessor :can_rotate, :scale_difficulty, :difficulty, :width, :height, :x, :y
 end
 
 class CustomDungeon
@@ -74,7 +83,7 @@ class CustomDungeon
         @dungeon = DungeonSpec.new(event)
         echoln("Dungeon: #{event.name}")
       elsif event.name[/^Room/]
-        @rooms.push(RoomSpec.new(event))
+        @rooms.push(RoomSpec.new(map, event))
         echoln("Room: #{event.name}")
       end
     end
@@ -84,14 +93,18 @@ class CustomDungeon
   end
 
   def generate
-    path_rooms = pick_rooms
-    path_length = path_rooms.length
-    path = DungeonPath.new(path_length)
-    path.generate
-    echoln(path)
+    rooms = pick_rooms
+    path_length = rooms.length
+    positions = DungeonRoomPositions.new(path_length)
+    positions.generate
+    positions.normalize
+    echoln(positions)
     # bonus_count = @difficulty / @dungeon_spec.bonus_rate
     # path.addBonus(bonus_count) if @dungeon_spec.bonus_rate.positive?
-    # set_rooms(path)
+    grid = draw_rooms(positions, rooms)
+    write_to_map(grid)
+
+    echo("width=#{@width} height=#{@height}")
   end
 
   def pick_rooms
@@ -118,8 +131,57 @@ class CustomDungeon
     room_pool
   end
 
-  def build_path(path_length, weights)
+  def draw_rooms(room_positions, rooms)
+    data = FlexGrid.new
+    offset_x = 0
+    offset_y = 0
+    move = FlexGrid::Coord.new(0, 0)
+    prev_room = nil
+    for r in 0...room_positions.length
+      next_move = room_positions.moves[r]
+      room = rooms[r]
+      if !move.nil?
+        offset_x -= room.width if move.x.negative?
+        offset_y -= room.height if move.y.negative?
+      end
+      if !next_move.nil? && !prev_room.nil?
+        offset_x += room.width - prev_room.width if next_move.x.positive?
+        offset_y += room.height - prev_room.height if next_move.y.positive?
+      end
+      data.draw_rectangle(offset_x, offset_y, room.width, room.height, @map_template.data, room.x, room.y)
+      if !next_move.nil?
+        offset_x += room.width if next_move.x.positive?
+        offset_y += room.height if next_move.y.positive?
+      end
+      prev_room = room
+      move = next_move
+
+    end
+    data
   end
+
+  def write_to_map(grid)
+    grid.normalize
+    @map.width = grid.width
+    @map.height = grid.height
+    @map.data = Table.new(grid.width, grid.height, 3)
+    for x in 0...grid.width
+      for y1 in 0...grid.height
+        y = grid.height - 1 - y1
+        d = grid[FlexGrid::Coord.new(x, y)]
+        next if d.nil?
+        @map.data[x, y, 0] = d[0]
+        @map.data[x, y, 1] = d[1]
+        @map.data[x, y, 2] = d[2]
+        # echoln("#{d} #{d[0]} #{d[1]} #{d[2]}")
+      end
+    end
+  end
+  # def set_rooms(room_positions)
+  #   for coord in room_positions.path
+  #     coord.
+  #   end
+  # end
 end
 
 Events.onMapCreate += proc { |_sender, e|
