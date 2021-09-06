@@ -133,29 +133,37 @@ class CustomDungeon
 
   def draw_rooms(room_positions, rooms)
     data = FlexGrid.new
-    offset_x = 0
-    offset_y = 0
-    move = FlexGrid::Coord.new(0, 0)
-    prev_room = nil
-    for r in 0...room_positions.length
-      next_move = room_positions.moves[r]
-      room = rooms[r]
-      if !move.nil?
-        offset_x -= room.width if move.x.negative?
-        offset_y -= room.height if move.y.negative?
-      end
-      if !next_move.nil? && !prev_room.nil?
-        offset_x += room.width - prev_room.width if next_move.x.positive?
-        offset_y += room.height - prev_room.height if next_move.y.positive?
-      end
-      data.draw_rectangle(offset_x, offset_y, room.width, room.height, @map_template.data, room.x, room.y)
-      if !next_move.nil?
-        offset_x += room.width if next_move.x.positive?
-        offset_y += room.height if next_move.y.positive?
-      end
-      prev_room = room
-      move = next_move
+    widths = []
+    heights = []
+    offset_x = [0]
+    offset_y = [0]
+    for i in 0...room_positions.grid.width
+      items = room_positions.grid.items_in_col(i)
+      items = items.map { |r| rooms[r].width }
+      width = items.max
+      widths.push(width)
+      offset_x.push(offset_x[-1] + width)
+    end
 
+    for i in 0...room_positions.grid.height
+      items = room_positions.grid.items_in_row(i)
+      items = items.map { |r| rooms[r].height }
+      height = items.max
+      heights.push(height)
+      offset_x.push(offset_x[-1] + height)
+    end
+
+    for x in 0...room_positions.grid.width
+      for y in 0...room_positions.grid.height
+        zone_width = widths[x]
+        zone_height = heights[x]
+        zone_offset_x = offset_x[x]
+        zone_offset_y = offset_y[y]
+        room = rooms[room_positions[FlexGrid::Coord.new(x,y)]]
+        width_variability = zone_width - room.width
+        height_variability = zone_height - room.height
+        data.draw_rectangle(zone_offset_x + rand(width_variability), zone_offset_y + rand(height_variability), room.width, room.height, map_template, room.x, room.y)
+      end
     end
     data
   end
