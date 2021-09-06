@@ -153,18 +153,24 @@ class CustomDungeon
       offset_x.push(offset_x[-1] + height)
     end
 
-    for x in 0...room_positions.grid.width
-      for y in 0...room_positions.grid.height
-        zone_width = widths[x]
-        zone_height = heights[x]
-        zone_offset_x = offset_x[x]
-        zone_offset_y = offset_y[y]
-        room = rooms[room_positions[FlexGrid::Coord.new(x,y)]]
-        width_variability = zone_width - room.width
-        height_variability = zone_height - room.height
-        data.draw_rectangle(zone_offset_x + rand(width_variability), zone_offset_y + rand(height_variability), room.width, room.height, map_template, room.x, room.y)
+    
+
+    for i in room_positions.length
+      c = room_positions.path[i]
+      room = rooms[room_positions[c]]
+      zone_width = widths[c.x]
+      zone_height = heights[c.y]
+      zone_offset_x = offset_x[c.x]
+      zone_offset_y = offset_y[c.y]
+      width_variability = zone_width - room.width
+      height_variability = zone_height - room.height
+      data.draw_rectangle(zone_offset_x + rand(width_variability), zone_offset_y + rand(height_variability), room.width, room.height, map_template, room.x, room.y)
+      if !prev_room.nil?
+        
       end
     end
+
+
     data
   end
 
