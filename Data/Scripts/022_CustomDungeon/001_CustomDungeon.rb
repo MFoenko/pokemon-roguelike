@@ -1,8 +1,6 @@
 class DungeonSpec
   def initialize(event = nil)
     @bonus_rate = 5
-    @wall_width = 2
-    @wall_height = 2
     if !event.nil?
       page = event.pages[0]
       for command in page.list
@@ -23,7 +21,7 @@ class DungeonSpec
     end
   end
 
-  attr_accessor :bonus_rate, :wall_width, :wall_height
+  attr_accessor :bonus_rate
 end
 
 class RoomSpec
@@ -64,6 +62,49 @@ class RoomSpec
   attr_accessor :can_rotate, :scale_difficulty, :difficulty, :width, :height, :x, :y
 end
 
+class WallSpec
+  def initialize(map, event)
+    @x = event.x + 1
+    @y = event.y
+    @top_height = 0
+    @middle_height = 0
+    @bottom_height = 1
+    echoln( "yo over here #{map.data[@x, @y, 1] }")
+    @width = 0
+    @width += 1 until map.data[@x + @width, @y, 0] == 0 && map.data[@x + @width, @y, 1] == 0 && map.data[@x + @width, @y, 2] == 0
+
+    echoln event.name
+    page = event.pages[0]
+    for command in page.list
+      echoln "Param #{command.parameters}"
+      next if command.code != 108 # skip non Comment
+      parseCommand(command.parameters[0])
+    end
+  end
+
+  def parseCommand(command)
+    echoln command
+    return if command.nil?
+    if command[/^TopHeight:*[\s\S]+$/i]
+      @top_height = $~[1].to_i
+    elsif command[/^MiddleHeight:*[\s\S]+$/i]
+      @middle_height = $~[1].to_i
+    elsif command[/^BottomHeight:*[\s\S]+$/i]
+      @bottom_height = $~[1].to_i
+    end
+  end
+
+  def min_height
+    @top_height + @bottom_height
+  end
+
+  def inspect
+    "x=#{!x} y=#{!y} width=#{@width} top_height=#{!top_height} middle_height=#{@middle_height} bottom_height=#{@bottom_height}"
+  end
+
+  attr_accessor  :x, :y, :width, :top_height, :middle_height, :bottom_height
+end
+
 class CustomDungeon
   def initialize(map, difficulty, difficulty_max)
     @map_template = map.clone
@@ -73,6 +114,7 @@ class CustomDungeon
 
     @dungeon_spec = nil
     @rooms = []
+    @walls = []
 
     echoln(map.events)
 
@@ -85,6 +127,9 @@ class CustomDungeon
       elsif event.name[/^Room/]
         @rooms.push(RoomSpec.new(map, event))
         echoln("Room: #{event.name}")
+      elsif event.name[/^Wall/]
+        @walls.push(WallSpec.new(map, event))
+        echoln("Wall: #{event.name}")
       end
     end
     if @dungeon_spec.nil?
@@ -131,8 +176,8 @@ class CustomDungeon
     room_pool
   end
 
-  WALL_WIDTH = 2
   WALL_HEIGHT = 2
+  WALL_WIDTH = 2
 
   def draw_rooms(room_positions, rooms)
     data = FlexGrid.new
@@ -223,6 +268,28 @@ class CustomDungeon
         end
       end
     end
+
+    max_wall_height = @walls.map { |w| w.min_height }.max
+    max_wall_width = @walls.map { |w| w.width }.max
+
+    for x in 0...data.width
+      for yi in 0...data.height
+        y = data.height - 1 - yi
+        next if !data[FlexGrid::Coord.new(x, y)].nil? || data[FlexGrid::Coord.new(x, y + 1)].nil?
+        echoln "x=#{x} y=#{y} this=#{data[FlexGrid::Coord.new(x, y)]} above=#{data[FlexGrid::Coord.new(x, y + 1)]}"
+
+        for wall in @walls
+          echoln "wall=#{wall} empty?=#{data.empty?(x, y - 1, wall.width, wall.min_height)}"
+
+          next if !data.empty?(x, y - 1, wall.width, wall.min_height)
+          data.draw_rectangle(x, y - 1, wall.width, wall.bottom_height, @map_template.data, wall.x, wall.y + wall.top_height + wall.middle_height)
+
+        end
+      end
+    end
+
+    data[FlexGrid::Coord.new(0, 0)] = [392, 0, 0]
+
     data
   end
 
@@ -232,8 +299,8 @@ class CustomDungeon
     @map.height = grid.height
     @map.data = Table.new(grid.width, grid.height, 3)
     for x in 0...grid.width
-      for y1 in 0...grid.height
-        y = grid.height - 1 - y1
+      for y in 0...grid.height
+        # y = grid.height - 1 - y1
         d = grid[FlexGrid::Coord.new(x, y)]
         next if d.nil?
         @map.data[x, y, 0] = d[0]

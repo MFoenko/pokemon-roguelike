@@ -93,11 +93,20 @@ class FlexGrid
     @data[coord.x - @begin_x][coord.y - @begin_y] = val
   end
 
+  def empty?(offset_x, offset_y, width = 1, height = 1)
+    for x in 0..width
+      for y in 0..height
+        return false if !self[Coord.new(offset_x + x, offset_y + y)].nil?
+      end
+    end
+    return true
+  end
+
   def draw_rectangle(offset_x, offset_y, width, height, table, table_x, table_y)
     # ensure space for the entire rectangle
     ensure_space(Coord.new(offset_x, offset_y))
     ensure_space(Coord.new(offset_x + width, offset_y + height))
-    echoln(table[table_x, table_y, 0])
+    # echoln "x=#{table_x} y=#{table_y}, width=#{width} height=#{height}"
 
     for i in 0...width
       for j in 0...height
@@ -140,17 +149,20 @@ class FlexGrid
   end
 
   def [](coord)
-    return nil if coord.nil? || coord.x < @begin_x || coord.y < @begin_y || coord.x > @end_x || coord.y > @end_y
+    return nil if !exists?(coord)
     col = @data[coord.x - @begin_x]
     return nil if col.nil?
     col[coord.y - @begin_y]
   end
 
+  def exists?(coord)
+    !(coord.nil? || coord.x < @begin_x || coord.y < @begin_y || coord.x > @end_x || coord.y > @end_y)
+  end
+
   def inspect
     string = ''
     # echoln "w=#{width} h=#{height}"
-    for y1 in 0...height
-      y = height() - y1 - 1
+    for y in 0...height
       for x in 0...width
         # echoln "x=#{x} y=#{y}"
         cell = @data[x][y]
@@ -168,9 +180,9 @@ class FlexGrid
     end
 
     START = Coord.new(0, 0)
-    N = Coord.new(0, 1)
+    N = Coord.new(0, -1)
     W = Coord.new(-1, 0)
-    S = Coord.new(0, -1)
+    S = Coord.new(0, 1)
     E = Coord.new(1, 0)
 
     def +(other)
