@@ -113,7 +113,10 @@ class FlexGrid
         x = table_x + i
         y = table_y + j
         point = Coord.new(offset_x + i, offset_y + j)
-        self[point] = [table[x, y, 0], table[x, y, 1], table[x, y, 2]]
+        self[point] = [0, 0, 0] if self[point].nil?
+        self[point][0] = table[x, y, 0] if table[x,y,0] != 0
+        self[point][1] = table[x, y, 1] if table[x,y,1] != 0
+        self[point][2] = table[x, y, 2] if table[x,y,2] != 0
       end
     end
   end
