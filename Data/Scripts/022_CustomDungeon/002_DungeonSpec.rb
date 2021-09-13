@@ -1,4 +1,26 @@
+module SpecHelper
+  def self.event_comments_to_map(event)
+    map = {}
+    return map if event.nil?
+    commentPage = event.pages[0]
+    for command in page.list
+      next if command.code != 108
+      next if !command[/^[\S]+:\s?[\S]+$/i]
+      key = $~[1]
+      val = $~[2]
+      if val.to_i.to_s == val
+        map[key] = val.to_i
+      else
+        map[key] = val
+      end
+    end
+    map
+  end
+
+end
+
 class DungeonSpec
+  include SpecHelper
   def initialize(event = nil)
     @bonus_rate = 5
     if !event.nil?
